@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucro Certo Lite</title>
+<link rel="manifest" href="manifest.json">
+
+<style>
+:root{
+    --primary:#27ae60;
+    --bg:#f3f5f7;
+    --text:#2c3e50;
+}
+
+body{
+    margin:0;
+    padding:25px 15px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+}
+
+.container{
+    max-width:500px;
+    margin:auto;
+    background:white;
+    padding:28px;
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.06);
+    transition:all .2s ease;
+}
+
+h1{
+    text-align:center;
+    color:var(--primary);
+    margin-bottom:25px;
+    font-weight:700;
+    letter-spacing:.5px;
+}
+
+input{
+    width:100%;
+    padding:14px;
+    margin:10px 0;
+    border-radius:10px;
+    border:1px solid #e0e6ed;
+    font-size:15px;
+    background:#fafafa;
+    transition:.2s;
+}
+
+input:focus{
+    outline:none;
+    border-color:var(--primary);
+    background:white;
+    box-shadow:0 0 0 3px rgba(39,174,96,.08);
+}
+
+button{
+    width:100%;
+    padding:15px;
+    margin-top:10px;
+    border:none;
+    border-radius:12px;
+    background:var(--primary);
+    color:white;
+    font-weight:600;
+    font-size:15px;
+    cursor:pointer;
+    transition:.2s;
+}
+
+button:hover{
+    opacity:.9;
+}
+
+.result-box{
+    background:#f0fdf4;
+    border:1px solid #d4f5df;
+    padding:18px;
+    border-radius:12px;
+    margin-top:20px;
+    display:none;
+    font-size:15px;
+}
+
+.history-item{
+    border-bottom:1px solid #f0f0f0;
+    padding:10px 0;
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    color:#555;
+}
+
+.reset-btn{
+    background:#e74c3c;
+    margin-top:15px;
+    padding:10px;
+    border-radius:10px;
+}
+
+#customModal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:1000;
+}
+
+.modal-content{
+    background:white;
+    padding:25px;
+    border-radius:16px;
+    width:85%;
+    max-width:320px;
+    text-align:center;
+    box-shadow:0 20px 40px rgba(0,0,0,.15);
+}
+
+.modal-title{
+    font-weight:700;
+    font-size:18px;
+    margin-bottom:12px;
+}
+
+.modal-msg{
+    margin-bottom:20px;
+    font-size:14px;
+    color:#555;
+}
+
+.modal-btn{
+    padding:10px 18px;
+    margin:5px;
+    border-radius:8px;
+    border:none;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.modal-btn:not(.cancel){
+    background:var(--primary);
+    color:white;
+}
+
+.cancel{
+    background:#95a5a6;
+    color:white;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>Lucro Certo Lite</h1>
+
+<input type="text" id="pName" placeholder="Nome do Produto">
+<input type="number" id="pCost" placeholder="Custo (R$)">
+<input type="number" id="pMargin" placeholder="Margem (%)">
+<input type="number" id="pQty" placeholder="Quantidade" value="1">
+
+<button onclick="calcular()">Calcular</button>
+
+<div id="displayResultado" class="result-box">
+<p>Preço Sugerido: <strong id="resPreco"></strong></p>
+<p>Lucro Unitário: <strong id="resLucroUni"></strong></p>
+<p>Lucro Total: <strong id="resLucroTotal"></strong></p>
+</div>
+
+<div style="margin-top:30px;">
+<div style="display:flex; justify-content:space-between; align-items:center;">
+<span style="font-weight:600;font-size:13px;">Histórico Recente (<span id="count">0</span>/20)</span>
+<button onclick="exportCSV()" style="width:auto;padding:6px 10px;font-size:12px;background:#334155;color:white;border:none;border-radius:8px;">Exportar CSV</button>
+</div>
+<div id="historyList"></div>
+<div style="text-align:center;">
+<button class="reset-btn" onclick="confirmReset()">Resetar Histórico</button>
+</div>
+</div>
+</div>
+
+<div id="customModal">
+<div class="modal-content">
+<div class="modal-title" id="modalTitle">Lucro Certo</div>
+<div class="modal-msg" id="modalMsg">Mensagem aqui</div>
+<div id="modalBtns"></div>
+</div>
+</div>
+
+<script>
+let db = JSON.parse(localStorage.getItem('lucro_certo_pwa_v1') || '[]');
+
+function mostrarModal(msg, buttons=[]) {
+document.getElementById('modalMsg').innerText = msg;
+const container = document.getElementById('modalBtns');
+container.innerHTML = "";
+buttons.forEach(btn=>{
+const b = document.createElement('button');
+b.className = 'modal-btn'+(btn.cancel ? ' cancel':'');
+b.innerText = btn.text;
+b.onclick = btn.action;
+container.appendChild(b);
+});
+document.getElementById('customModal').style.display = 'flex';
+}
+
+function fecharModal(){
+document.getElementById('customModal').style.display = 'none';
+}
+
+function calcular() {
+const custo = parseFloat(document.getElementById('pCost').value);
+const margem = parseFloat(document.getElementById('pMargin').value);
+const quantidade = parseInt(document.getElementById('pQty').value);
+
+if (isNaN(custo) || custo <= 0) return mostrarModal("Insira um custo válido.", [{text:"OK", action:fecharModal}]);
+if (isNaN(margem) || margem < 0 || margem >= 100) return mostrarModal("Margem inválida (0-99%).", [{text:"OK", action:fecharModal}]);
+if (isNaN(quantidade) || quantidade < 1) return mostrarModal("Quantidade mínima é 1.", [{text:"OK", action:fecharModal}]);
+
+const precoSugerido = custo / (1 - (margem / 100));
+const lucroUnitario = precoSugerido - custo;
+const lucroTotal = lucroUnitario * quantidade;
+const fmt = v => v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+document.getElementById('resPreco').innerText = "R$ "+fmt(precoSugerido);
+document.getElementById('resLucroUni').innerText = "R$ "+fmt(lucroUnitario);
+document.getElementById('resLucroTotal').innerText = "R$ "+fmt(lucroTotal);
+document.getElementById('displayResultado').style.display = 'block';
+
+if(db.length>=20) db.pop();
+
+db.unshift({
+data: new Date().toLocaleDateString('pt-BR'),
+hora: new Date().toLocaleTimeString('pt-BR',{hour12:false}),
+nome: document.getElementById('pName').value || 'Produto',
+quantidade: quantidade,
+margem: margem,
+preco: fmt(precoSugerido),
+lucroUnitario: fmt(lucroUnitario),
+lucroTotal: fmt(lucroTotal)
+});
+
+localStorage.setItem('lucro_certo_pwa_v1', JSON.stringify(db));
+renderHistory();
+}
+
+function renderHistory(){
+document.getElementById('count').innerText = db.length;
+document.getElementById('historyList').innerHTML = db.map(i=>`
+<div class="history-item">
+<span>${i.data} ${i.hora} - ${i.nome} (${i.quantidade})</span>
+<strong>R$ ${i.preco}</strong>
+</div>
+`).join('');
+}
+
+function confirmReset(){
+if(db.length===0) return mostrarModal("Não há histórico para resetar.",[{text:"OK", action:fecharModal}]);
+mostrarModal("Deseja realmente apagar todo o histórico?",[
+{text:"Cancelar", action:fecharModal, cancel:true},
+{text:"Confirmar", action:()=>{
+db=[];
+localStorage.removeItem('lucro_certo_pwa_v1');
+renderHistory();
+fecharModal();
+}}
+]);
+}
+
+function exportCSV(){
+if(db.length===0) return mostrarModal("Não há histórico para exportar.",[{text:"OK", action:fecharModal}]);
+let csvContent=`"Data";"Hora";"Produto";"Quantidade";"Margem (%)";"Preço Sugerido";"Lucro Unitário";"Lucro Total"\r\n`;
+db.forEach(row=>{
+csvContent+=`"${row.data}";"${row.hora}";"${row.nome}";"${row.quantidade}";"${row.margem}";"${row.preco}";"${row.lucroUnitario}";"${row.lucroTotal}"\r\n`;
+});
+const blob=new Blob(["\uFEFF"+csvContent],{type:'text/csv;charset=utf-8;'});
+const url=URL.createObjectURL(blob);
+const link=document.createElement("a");
+link.setAttribute("href",url);
+const now=new Date();
+const fileName=`historico_lucrocerto_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}.csv`;
+link.setAttribute("download",fileName);
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+URL.revokeObjectURL(url);
+}
+
+renderHistory();
+
+if ('serviceWorker' in navigator) {
+window.addEventListener('load', function () {
+navigator.serviceWorker.register('sw.js');
+});
+}
+</script>
+</body>
+</html>
